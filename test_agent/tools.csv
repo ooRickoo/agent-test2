@@ -1,0 +1,140 @@
+﻿tool,entity_type,description,sample_call,tool_help,sample_output
+domaininformation.py,internet_domain,"Whois, DNS, and Virus total information on a domain or FQDN",python domaininformation.py rickonsecurity.com,"bash-3.2$ python domaininformation.py --help
+usage: domaininformation.py [-h] [--no-vt] [--output {textjsoncsv}] [--batch] [--threads THREADS] [--extended-dns] input
+
+Domain Information Tool
+
+positional arguments:
+  input                 Domain name FQDN or file with list of domains (for batch mode)
+
+optional arguments:
+  -h --help            show this help message and exit
+  --no-vt               Skip VirusTotal lookup
+  --output {textjsoncsv}
+                        Output format (default: text)
+  --batch               Batch process multiple domains from a file
+  --threads THREADS     Number of concurrent threads for batch processing (default: 4)
+  --extended-dns        Show full/extended DNS record summary (A AAAA CNAME MX etc)","bash-3.2$ python domaininformation.py rickonsecurity.com
+
+Analyzing: rickonsecurity.com
+
+=== WHOIS Information ===
+Domain name: rickonsecurity.com
+Registrar: Bluehost Inc.
+Whois server: whois.fastdomain.com
+Creation date: 2022-11-15 00:56:48
+Expiration date: 2025-11-15 00:56:48
+Update date: 2024-10-30 08:50:21; 2024-10-30 08:51:54
+DNSSEC: unsigned
+
+=== DNS Information ===
+
+Name servers for rickonsecurity.com:
+  KATJA.NS.CLOUDFLARE.COM - Forwarding
+  TREVOR.NS.CLOUDFLARE.COM - Cache-only
+
+MX Records for rickonsecurity.com:
+  10 mx01.mail.icloud.com.
+  10 mx02.mail.icloud.com.
+
+=== VirusTotal Analysis ===
+Risk Assessment: Low Risk
+Security Vendors:
+  Flagged as malicious: 0
+  Flagged as suspicious: 0
+  Flagged as harmless: 63
+  Undetected: 31
+Reputation Score: 0 (-100 to +100 higher is better)
+Categories:
+  alphaMountain.ai: Information Technology (alphaMountain.ai)
+Community Votes: 0 harmless 0 malicious
+
+=== Domain Status ===
+Domain appears to be registered and active."
+epoch_converter.py,time,Convert EPOCH computer time to human readable,python epoch_converter.py 1749431284567,"bash-3.2$ python epoch_converter.py
+Usage: python epoch_converter.py [epoch_time]
+Examples:
+  python epoch_converter.py 1749431814      # Current epoch (seconds)
+  python epoch_converter.py 1749431814817   # Current epoch (milliseconds)
+bash-3.2$ ","bash-3.2$ python epoch_converter.py 1749431284567
+06/08/2025 21:08:04 EDT"
+hostinformation.py,"internet_ip, internet_fqdn","Intenet Host or IP lookup that checks the entity against shodan, absuseipdb, and intenal tools to generate a summary reprot of security posture for entity.",python hostinformation.py 168.149.137.224,"bash-3.2$ python hostinformation.py --help
+usage: hostinformation.py [-h] [-k SHODAN_KEY] [-a ABUSEIPDB_KEY] [-j] [--shodan-only] [--abuseipdb-only] [target]
+
+Get comprehensive host information from multiple sources
+
+positional arguments:
+  target                The IP address or domain name to look up
+
+optional arguments:
+  -h --help            show this help message and exit
+  -k SHODAN_KEY --shodan-key SHODAN_KEY
+                        Shodan API key
+  -a ABUSEIPDB_KEY --abuseipdb-key ABUSEIPDB_KEY
+                        AbuseIPDB API key
+  -j --json            Output results as JSON
+  --shodan-only         Only use Shodan for lookups
+  --abuseipdb-only      Only use AbuseIPDB for lookups","bash-3.2$ python hostinformation.py 168.149.137.224
+Looking up information for: 168.149.137.224
+Retrieving geolocation data...
+Querying Shodan database...
+Shodan Error: No information available for that IP.
+No information found in Shodan database.
+Querying AbuseIPDB...
+
+=== HOST INFORMATION FOR: 168.149.137.224 ===
+
+=== BASIC INFORMATION ===
+IP: 168.149.137.224
+Organization: Symantec Corporation
+ISP: Avago Technologies U.S. Inc.
+Hostname(s): N/A
+Country: United States of America (US)
+City: Clayton
+Region: North Carolina
+Coordinates: 35.6507 -78.4564
+ASN: AS396982 Google LLC
+
+=== THREAT INTELLIGENCE ===
+
+----- AbuseIPDB Report -----
+Abuse Confidence Score: 0%
+Total Reports: 0
+Last Reported: Never
+Usage Type: Data Center/Web Hosting/Transit
+
+----- Geolocation Information -----
+Timezone: America/New_York
+
+----- Threat Summary -----
+No explicit malicious indicators found
+
+Note: Port/service scan information not available. Use Shodan API for port and service details.
+
+=== ADDITIONAL INFO ===
+Domain: broadcom.com
+Timezone: America/New_York
+
+Note: For more detailed port and service information try using the Shodan API."
+ip_geolocation.py,"internet_ip, internet_fqdn",Geolocate any IP or domain host on the internet.,python ip_geolocation.py 168.149.137.224,"bash-3.2$ python ip_geolocation.py --help
+usage: ip_geolocation.py [-h] [-s {ipapiipinfo}] [ip_or_url]
+
+IP Address Geolocation Tool
+
+positional arguments:
+  ip_or_url             IP address or URL to geolocate
+
+optional arguments:
+  -h --help            show this help message and exit
+  -s {ipapiipinfo} --service {ipapiipinfo}
+                        Geolocation service to use (default: ipapi)","bash-3.2$ python ip_geolocation.py 168.149.137.224
+
+==== IP Geolocation Results ====
+IP Address: 168.149.137.224
+Country: United States (US)
+Region: North Carolina
+City: Clayton
+Location: 35.6507 -78.4564
+ISP/Organization: Google LLC
+Timezone: America/New_York
+=============================="
