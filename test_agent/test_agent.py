@@ -13,28 +13,7 @@ import whois
 import dns.resolver
 import requests
 import time
-
-# Add secure_agent_lib to Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'secure_agent_lib'))
-
-# Add the project root to Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, project_root)
-
-from secure_agent_lib.examples.public_api_example import PublicAPIAgent
-from secure_agent_lib.examples.cybertools_agent import CybertoolsAgent
-from secure_agent_lib.config.base_config import (
-    AgentConfig,
-    LoggingConfig,
-    SecurityConfig,
-    ValidationConfig,
-    APIConfig
-)
-from secure_agent_lib.core.base_agent import BaseAgent
-import json
-from typing import Dict, Any
 import anthropic
-import requests
 
 # Configure logging
 logging.basicConfig(
@@ -210,195 +189,63 @@ def summarize_with_ai(data: str, query: str) -> str:
     # This is a placeholder for AI summarization
     return f"Based on the analysis of {query}, here are the key findings:\n{data}"
 
-def process_query(query: str, public_api_agent: PublicAPIAgent, cybertools_agent: CybertoolsAgent) -> None:
-    """Process a user query using both agents."""
-    print("\n=== Starting Comprehensive Security Analysis ===")
-    print("This analysis will use multiple security tools and sources to provide a complete assessment.")
+def process_query(query: str) -> None:
+    """Process the user's query and perform security analysis."""
+    # Load environment variables
+    load_dotenv()
     
-    # Extract domain or IP from query
-    domain_match = re.search(r'([a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,})[^a-zA-Z0-9-]?', query)
-    ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', query)
+    # Verify API keys
+    anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
+    if not anthropic_api_key:
+        print("Error: ANTHROPIC_API_KEY not found in environment variables")
+        return
     
-    entity = None
-    entity_type = None
+    # Initialize Claude client
+    client = anthropic.Anthropic(api_key=anthropic_api_key)
     
-    if domain_match:
-        # Clean up the domain by removing any trailing punctuation
-        entity = domain_match.group(1).rstrip('?.,!;:')
-        entity_type = "domain"
-        if is_internal_domain(entity):
-            print("\n❌ Access Denied: This agent can only analyze public internet resources.")
-            print("The requested domain appears to be internal or related to rickonsecurity.com.")
-            return
-    elif ip_match:
-        entity = ip_match.group(0)
-        entity_type = "ip"
-        if is_private_ip(entity):
-            print("\n❌ Access Denied: This agent can only analyze public internet resources.")
-            print("The requested IP address is private/internal.")
-            return
-    
-    # Initialize list to store all tool outputs
-    all_tool_outputs = []
-    
-    # Process with PublicAPIAgent if we have an entity
-    if entity:
-        print("\n=== Phase 1: Threat Intelligence Analysis ===")
-        print("Analyzing using VirusTotal, AbuseIPDB, Shodan, and Geolocation...")
-        
-        result = public_api_agent.process_input(query, {})
-        tool_outputs = collect_tool_outputs(result, "PublicAPIAgent")
-        
-        if tool_outputs:
-            print("\n📊 Threat Intelligence Results:")
-            print(tool_outputs)
-            all_tool_outputs.append(tool_outputs)
-    
-    # Phase 2: Use CybertoolsAgent for additional analysis
-    if entity:
-        print("\n=== Phase 2: Additional Tool Analysis (CybertoolsAgent) ===")
-        result2 = cybertools_agent.process_input(query)
-        if not result2.get('success'):
-            print(result2.get('message', 'No additional results.'))
-        else:
-            # Get applicable tools
-            tools = cybertools_agent._get_applicable_tools(result2['entity_type'])
-            tool_results = []
-            for tool in tools:
-                tool_result = cybertools_agent.execute_tool(
-                    tool['tool'],
-                    command=tool['command']
-                )
-                tool_results.append(tool_result)
-            # Analyze results
-            analysis = cybertools_agent._analyze_results(tool_results, result2['entity'])
-            print("\nCybertoolsAgent Analysis:")
-            print(analysis)
-    
-    # If we have a domain, analyze it regardless of external API results
-    if entity_type == "domain":
-        print("\n=== Phase 2: Domain Analysis ===")
-        domain = entity
-        soa_serial = None  # Initialize soa_serial to None
-        dns_records = {}  # Initialize dns_records as an empty dictionary
-        resolved_ip = None  # Initialize resolved_ip to None
-        public_api_results = []  # Initialize public_api_results as an empty list
-        is_new, age_str = get_domain_age(domain, soa_serial)
-        print(f"\n=== Domain Information for {domain} ===\n")
-        print("=== DNS Records ===\n")
-        for record_type, records in dns_records.items():
-            if records:
-                print(f"{record_type} Records:")
-                for record in records:
-                    print(record)
-                print()
-        print(f"Resolved IP: {resolved_ip}\n")
-        # Only show warning if domain age is known and less than 30 days old
-        age_days = 0 if age_str == 'Unknown' else int(age_str.split()[0])
-        if age_str != 'Unknown' and age_days < 30:
-            print("⚠️ SECURITY WARNING: This domain is only {} old!".format(age_str))
-            print("New domains (less than 30 days old) are often used for malicious purposes such as:")
-            print("- Phishing campaigns")
-            print("- Malware distribution")
-            print("- Spam operations")
-            print("- Command and control servers")
-            print("- Fraudulent websites")
-            print("\nExercise extreme caution when interacting with this domain.\n")
-        all_tool_outputs.append(f"⚠️ SECURITY WARNING: This domain is only {age_str} old!")
-        all_tool_outputs.append("New domains (less than 30 days old) are often used for malicious purposes such as:")
-        all_tool_outputs.append("- Phishing campaigns")
-        all_tool_outputs.append("- Malware distribution")
-        all_tool_outputs.append("- Spam operations")
-        all_tool_outputs.append("- Command and control servers")
-        all_tool_outputs.append("- Fraudulent websites")
-        all_tool_outputs.append("\nExercise extreme caution when interacting with this domain.")
-    
-    # If we have an IP address, also use the cybertools
-    elif entity_type == "ip":
-        print("\n=== Phase 2: Additional IP Analysis ===")
-        ip = entity
-        
-        try:
-            # Get geolocation data
-            geo_data = geolocate_ip_ipapi(ip)
-            if "error" not in geo_data:
-                geo_output = f"""=== Detailed Geolocation Information ===
-IP: {ip}
-Country: {geo_data.get('country', 'N/A')}
-Region: {geo_data.get('region', 'N/A')}
-City: {geo_data.get('city', 'N/A')}"""
-                if "latitude" in geo_data and "longitude" in geo_data:
-                    geo_output += f"\nCoordinates: {geo_data['latitude']}, {geo_data['longitude']}"
-                geo_output += f"\nISP: {geo_data.get('isp', 'N/A')}"
-                geo_output += f"\nTimezone: {geo_data.get('timezone', 'N/A')}"
-                print(f"\n{geo_output}")
-                all_tool_outputs.append(geo_output)
-        except Exception as e:
-            print(f"\nError getting geolocation data: {str(e)}")
-        
-        try:
-            # Get host information
-            shodan_key = os.getenv('SHODAN_API_KEY')
-            abuseipdb_key = os.getenv('ABUSEIPDB_API_KEY')
+    # Determine if the query is about a domain or IP
+    if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', query):
+        # IP address analysis
+        results = analyze_ip(query)
+        if results:
+            print("\n=== IP Analysis Results ===")
+            print(json.dumps(results, indent=2))
             
-            if shodan_key and abuseipdb_key:
-                shodan_results = shodan_ip_lookup(ip, shodan_key)
-                abuseipdb_data = lookup_ip_abuseipdb(ip, abuseipdb_key)
-                
-                if shodan_results or abuseipdb_data:
-                    host_output = "\n=== Additional Host Information ==="
-                    
-                    if shodan_results:
-                        shodan_output = "\nShodan Information:"
-                        shodan_output += f"\nOrganization: {shodan_results.get('org', 'N/A')}"
-                        shodan_output += f"\nISP: {shodan_results.get('isp', 'N/A')}"
-                        if "ports" in shodan_results:
-                            shodan_output += f"\nOpen Ports: {', '.join(map(str, shodan_results['ports']))}"
-                        host_output += shodan_output
-                    else:
-                        host_output += "\nShodan Error: No information available for that IP."
-                    
-                    if abuseipdb_data and "error" not in abuseipdb_data:
-                        abuse_output = "\nAbuseIPDB Information:"
-                        abuse_output += f"\nAbuse Confidence Score: {abuseipdb_data.get('abuseConfidenceScore', 'N/A')}%"
-                        abuse_output += f"\nTotal Reports: {abuseipdb_data.get('totalReports', 'N/A')}"
-                        abuse_output += f"\nLast Reported: {abuseipdb_data.get('lastReportedAt', 'Never')}"
-                        host_output += abuse_output
-                    
-                    print(host_output)
-                    all_tool_outputs.append(host_output)
-        except Exception as e:
-            print(f"\nError getting host information: {str(e)}")
-    
-    # Combine all tool outputs for final summarization
-    combined_outputs = "\n\n".join(all_tool_outputs) if all_tool_outputs else "No information available"
-    
-    # Print AI Analysis Summary
-    print("\n=== AI Analysis Summary ===")
-    print(f"Based on the analysis of {query}, here are the key findings:")
-    
-    # Add PublicAPIAgent results to summary
-    if public_api_results:
-        print("\nThreat Intelligence Analysis:")
-        for result in public_api_results:
-            print(f"- {result}")
+            # Generate AI summary
+            try:
+                response = client.messages.create(
+                    model="claude-3-opus-20240229",
+                    max_tokens=1000,
+                    messages=[{
+                        "role": "user",
+                        "content": f"Analyze this IP address data and provide a security assessment: {json.dumps(results)}"
+                    }]
+                )
+                print("\n=== AI Security Assessment ===")
+                print(response.content[0].text)
+            except Exception as e:
+                print(f"Error generating AI summary: {str(e)}")
     else:
-        print("No results from PublicAPIAgent")
-    
-    # Add domain age warning to summary only if age is known and less than 30 days
-    if entity_type == "domain" and age_str != 'Unknown' and age_days < 30:
-        print(f"\n⚠️ SECURITY WARNING: This domain is only {age_str} old!")
-        print("\nNew domains (less than 30 days old) are often used for malicious purposes such as:")
-        print("\n- Phishing campaigns")
-        print("\n- Malware distribution")
-        print("\n- Spam operations")
-        print("\n- Command and control servers")
-        print("\n- Fraudulent websites")
-        print("\n\nExercise extreme caution when interacting with this domain.")
-    
-    print("\n=== Analysis Complete ===")
-    print("The analysis has been completed using multiple security tools and sources.")
-    print("Review both phases above for a comprehensive security assessment.")
+        # Domain analysis
+        results = analyze_domain(query)
+        if results:
+            print("\n=== Domain Analysis Results ===")
+            print(json.dumps(results, indent=2))
+            
+            # Generate AI summary
+            try:
+                response = client.messages.create(
+                    model="claude-3-opus-20240229",
+                    max_tokens=1000,
+                    messages=[{
+                        "role": "user",
+                        "content": f"Analyze this domain data and provide a security assessment: {json.dumps(results)}"
+                    }]
+                )
+                print("\n=== AI Security Assessment ===")
+                print(response.content[0].text)
+            except Exception as e:
+                print(f"Error generating AI summary: {str(e)}")
 
 def verify_api_key(key_name: str, value: str) -> bool:
     """Verify that an API key is properly formatted"""
@@ -425,38 +272,69 @@ def verify_api_key(key_name: str, value: str) -> bool:
     return True
 
 def format_result(tool_name: str, data: Dict[str, Any]) -> str:
-    """Format the result from a specific tool"""
+    """Format the result from a specific tool with improved readability"""
+    def format_section(title: str, content: str) -> str:
+        """Helper function to format a section with a title and content"""
+        return f"\n{'=' * 50}\n{title}\n{'=' * 50}\n{content}\n"
+
+    def format_key_value(key: str, value: Any) -> str:
+        """Helper function to format a key-value pair"""
+        return f"  {key}: {value}"
+
     if tool_name == 'virustotal':
         attributes = data.get('attributes', {})
-        return f"""VirusTotal Analysis:
-Entity: {data.get('id')}
-Type: {data.get('type')}
-AS Owner: {attributes.get('as_owner', 'Unknown')}
-Country: {attributes.get('country', 'Unknown')}
-Reputation: {attributes.get('reputation', 0)}
+        stats = attributes.get('last_analysis_stats', {})
+        content = f"""
+{format_key_value('Entity', data.get('id'))}
+{format_key_value('Type', data.get('type'))}
+{format_key_value('AS Owner', attributes.get('as_owner', 'Unknown'))}
+{format_key_value('Country', attributes.get('country', 'Unknown'))}
+{format_key_value('Reputation', attributes.get('reputation', 0))}
+
 Last Analysis Stats:
-  - Malicious: {attributes.get('last_analysis_stats', {}).get('malicious', 0)}
-  - Suspicious: {attributes.get('last_analysis_stats', {}).get('suspicious', 0)}
-  - Undetected: {attributes.get('last_analysis_stats', {}).get('undetected', 0)}
-  - Harmless: {attributes.get('last_analysis_stats', {}).get('harmless', 0)}"""
+{format_key_value('Malicious', stats.get('malicious', 0))}
+{format_key_value('Suspicious', stats.get('suspicious', 0))}
+{format_key_value('Undetected', stats.get('undetected', 0))}
+{format_key_value('Harmless', stats.get('harmless', 0))}"""
+        return format_section("VirusTotal Analysis", content)
     
     elif tool_name == 'abuseipdb':
-        return f"""AbuseIPDB Analysis:
-IP Address: {data.get('ipAddress')}
-Abuse Confidence Score: {data.get('abuseConfidenceScore')}%
-Total Reports: {data.get('totalReports')}
-Last Reported: {data.get('lastReportedAt')}
-Country: {data.get('countryName')} ({data.get('countryCode')})
-ISP: {data.get('isp', 'Unknown')}
-Organization: {data.get('organization', 'Unknown')}
-Latitude: {data.get('latitude')}
-Longitude: {data.get('longitude')}
-Timezone: {data.get('timezone')}"""
+        content = f"""
+{format_key_value('IP Address', data.get('ipAddress'))}
+{format_key_value('Abuse Confidence Score', f"{data.get('abuseConfidenceScore')}%")}
+{format_key_value('Total Reports', data.get('totalReports'))}
+{format_key_value('Last Reported', data.get('lastReportedAt'))}
+{format_key_value('Country', f"{data.get('countryName')} ({data.get('countryCode')})")}
+{format_key_value('ISP', data.get('isp', 'Unknown'))}
+{format_key_value('Organization', data.get('organization', 'Unknown'))}
+{format_key_value('Location', f"Lat: {data.get('latitude')}, Long: {data.get('longitude')}")}
+{format_key_value('Timezone', data.get('timezone'))}"""
+        return format_section("AbuseIPDB Analysis", content)
     
-    return f"Unknown tool: {tool_name}"
+    return format_section("Unknown Tool", f"Tool name: {tool_name}")
 
 def generate_ai_summary(domain: str, dns_records: Dict[str, list], whois_info: Dict[str, Any], age: str) -> Dict[str, Any]:
     """Generate a comprehensive AI analysis summary from the collected data."""
+    def format_section(title: str, content: Dict[str, Any]) -> str:
+        """Helper function to format a section with a title and content"""
+        output = [f"\n{'=' * 50}", title, '=' * 50]
+        
+        if isinstance(content, dict):
+            for key, value in content.items():
+                if isinstance(value, list):
+                    output.append(f"\n{key}:")
+                    for item in value:
+                        output.append(f"  - {item}")
+                else:
+                    output.append(f"\n{key}: {value}")
+        elif isinstance(content, list):
+            for item in content:
+                output.append(f"  - {item}")
+        else:
+            output.append(f"\n{content}")
+            
+        return "\n".join(output)
+
     summary = {
         "domain": domain,
         "infrastructure": {},
@@ -587,7 +465,33 @@ def generate_ai_summary(domain: str, dns_records: Dict[str, list], whois_info: D
         "level": "High" if security_score >= 4 else "Medium" if security_score >= 2 else "Low"
     }
     
-    return summary
+    # Format the output for better readability
+    formatted_summary = {
+        "Domain Analysis": {
+            "Domain": domain,
+            "Age": age
+        },
+        "Infrastructure": summary["infrastructure"],
+        "Security Assessment": {
+            "Score": f"{security_score}/5",
+            "Level": summary["security_assessment"]["level"],
+            "Factors": summary["security_assessment"]["factors"]
+        },
+        "Security Indicators": summary["security_indicators"],
+        "Threat Indicators": [
+            {
+                "Type": indicator["type"],
+                "Severity": indicator["severity"],
+                "Description": indicator["description"],
+                "Potential Risks": indicator["potential_risks"],
+                "Recommendations": indicator["recommendations"]
+            }
+            for indicator in summary["threat_indicators"]
+        ],
+        "Recommendations": summary["recommendations"]
+    }
+    
+    return formatted_summary
 
 def analyze_domain(domain: str) -> Dict[str, Any]:
     """Analyze domain using various tools."""
@@ -1067,190 +971,22 @@ def analyze_ip(ip: str) -> Dict[str, Any]:
     return results
 
 def main():
-    print("\n=== Security Analysis Tool ===")
-    print("What would you like to analyze?")
-    print("Examples:")
-    print("  - Check the security status of 8.8.8.8")
-    print("  - What can you tell me about example.com?")
-    print("  - Analyze the security posture of data-gadgets.com")
-    print("  - Where is 8.8.8.8 located?")
-    print("\nEnter your query (or 'quit' to exit):")
+    """Main function to run the security analysis tool."""
+    print("Welcome to the Security Analysis Tool!")
+    print("This tool helps analyze domains and IP addresses for security information.")
     
     while True:
-        user_input = input("> ").strip()
+        query = get_user_input()
         
-        if user_input.lower() == 'quit':
+        if query.lower() == 'quit':
+            print("\nThank you for using the Security Analysis Tool!")
             break
         
-        print("\n=== Starting Comprehensive Security Analysis ===")
-        print("This analysis will use multiple security tools and sources to provide a complete assessment.")
-        
-        # Extract IP or domain from the query
-        target = None
-        if "where is" in user_input.lower():
-            # Handle "where is" queries
-            target = user_input.lower().split("where is")[-1].strip()
-            if target.endswith("located?"):
-                target = target[:-8].strip()
-        else:
-            # Handle other query formats
-            words = user_input.split()
-            for word in words:
-                # Check if the word is an IP address
-                try:
-                    ipaddress.ip_address(word)
-                    target = word
-                    break
-                except ValueError:
-                    continue
-        
-        if not target:
-            print("Could not identify an IP address or domain in your query.")
+        if not query:
+            print("Please enter a valid query.")
             continue
         
-        # Phase 1: Threat Intelligence Analysis
-        print("\n=== Phase 1: Threat Intelligence Analysis ===")
-        print("Analyzing using VirusTotal, AbuseIPDB, Shodan, and Geolocation...")
-        
-        # Initialize results dictionary
-        results = {}
-        
-        # Phase 2: Additional Tool Analysis
-        print("\n=== Phase 2: Additional Tool Analysis (CybertoolsAgent) ===")
-        try:
-            # Check if input is an IP address
-            try:
-                ip_obj = ipaddress.ip_address(target)
-                analysis_results = analyze_ip(str(ip_obj))
-                
-                print("\n=== IP Information ===")
-                print(f"IP: {analysis_results['ip']}")
-                print(f"Type: {analysis_results.get('ip_type', 'Unknown')}")
-                
-                if analysis_results.get("geolocation"):
-                    print("\n=== Geolocation Information ===")
-                    geo = analysis_results["geolocation"]
-                    print(f"Location: {geo.get('city', 'Unknown')}, {geo.get('region', 'Unknown')}, {geo.get('country', 'Unknown')}")
-                    print(f"Coordinates: {geo.get('latitude', 'Unknown')}, {geo.get('longitude', 'Unknown')}")
-                    print(f"Timezone: {geo.get('timezone', 'Unknown')}")
-                    print(f"ISP: {geo.get('isp', 'Unknown')}")
-                    print(f"ASN: {geo.get('asn', 'Unknown')}")
-                
-                if analysis_results.get("security_indicators"):
-                    print("\n=== Security Indicators ===")
-                    for key, value in analysis_results["security_indicators"].items():
-                        if isinstance(value, list):
-                            print(f"- {key.replace('_', ' ').title()}: {', '.join(map(str, value))}")
-                        else:
-                            print(f"- {key.replace('_', ' ').title()}: {value}")
-                
-                if analysis_results.get("threat_indicators"):
-                    print("\n⚠️ THREAT INDICATORS:")
-                    for indicator in analysis_results["threat_indicators"]:
-                        print(f"\n🔴 {indicator['type'].replace('_', ' ').title()} (Severity: {indicator['severity'].upper()})")
-                        print(f"   Description: {indicator['description']}")
-                        print("   Potential Risks:")
-                        for risk in indicator['potential_risks']:
-                            print(f"   - {risk}")
-                        print("   Recommendations:")
-                        for rec in indicator['recommendations']:
-                            print(f"   - {rec}")
-                
-                if analysis_results.get("dns_records"):
-                    print("\n=== DNS Records ===")
-                    for record_type, records in analysis_results["dns_records"].items():
-                        if records:
-                            print(f"{record_type} Records: {', '.join(records)}")
-                
-            except ValueError:
-                # Not an IP address, try domain analysis
-                domain_match = re.search(r'([a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](\.[a-zA-Z]{2,})+)[?.,!;:]*', user_input)
-                if domain_match:
-                    domain = domain_match.group(1)
-                    domain_results = analyze_domain(domain)
-                    
-                    print("\n=== Domain Information ===")
-                    print(f"Domain: {domain}")
-                    print(f"Age: {domain_results.get('age', 'Unknown')}")
-                    print(f"Is New Domain: {domain_results.get('is_new', False)}")
-                    
-                    if domain_results.get("dns_records"):
-                        print("\n=== DNS Records ===")
-                        for record_type, records in domain_results["dns_records"].items():
-                            if records:
-                                print(f"{record_type} Records: {', '.join(records)}")
-                    
-                    if domain_results.get("whois_info"):
-                        print("\n=== WHOIS Information ===")
-                        whois_info = domain_results["whois_info"]
-                        for key, value in whois_info.items():
-                            if value:
-                                print(f"{key.replace('_', ' ').title()}: {value}")
-                    
-                    # AI Analysis Summary
-                    print("\n=== AI Analysis Summary ===")
-                    print(f"Based on the analysis of {user_input}, here are the key findings:")
-                    
-                    ai_summary = generate_ai_summary(
-                        domain,
-                        domain_results.get("dns_records", {}),
-                        domain_results.get("whois_info", {}),
-                        domain_results.get("age", "Unknown")
-                    )
-                    
-                    print("\nDomain Analysis:")
-                    print(f"Domain: {ai_summary['domain']}")
-                    
-                    if ai_summary["infrastructure"]:
-                        print("\nInfrastructure:")
-                        for key, value in ai_summary["infrastructure"].items():
-                            print(f"- {key.replace('_', ' ').title()}: {', '.join(value) if isinstance(value, list) else value}")
-                    
-                    if ai_summary["security_indicators"]:
-                        print("\nSecurity Indicators:")
-                        for key, value in ai_summary["security_indicators"].items():
-                            print(f"- {key.replace('_', ' ').title()}: {value}")
-                    
-                    if ai_summary["threat_indicators"]:
-                        print("\n⚠️ THREAT INDICATORS:")
-                        for indicator in ai_summary["threat_indicators"]:
-                            print(f"\n🔴 {indicator['type'].replace('_', ' ').title()} (Severity: {indicator['severity'].upper()})")
-                            print(f"   Description: {indicator['description']}")
-                            print("   Potential Risks:")
-                            for risk in indicator['potential_risks']:
-                                print(f"   - {risk}")
-                    
-                    if ai_summary["security_assessment"]:
-                        print("\nSecurity Assessment:")
-                        print(f"- Overall Score: {ai_summary['security_assessment']['score']}/5")
-                        print(f"- Security Level: {ai_summary['security_assessment']['level']}")
-                        if ai_summary["security_assessment"]["factors"]:
-                            print("- Contributing Factors:")
-                            for factor in ai_summary["security_assessment"]["factors"]:
-                                print(f"  * {factor}")
-                    
-                    if ai_summary["recommendations"]:
-                        print("\nRecommendations:")
-                        for rec in ai_summary["recommendations"]:
-                            print(f"- {rec}")
-                else:
-                    print("No domain or IP analysis available.")
-            
-        except Exception as e:
-            print(f"Error during analysis: {str(e)}")
-        
-        print("\n=== Analysis Complete ===")
-        print("The analysis has been completed using multiple security tools and sources.")
-        print("Review both phases above for a comprehensive security assessment.")
-        
-        print("\n=== Security Analysis Tool ===")
-        print("What would you like to analyze?")
-        print("Examples:")
-        print("  - Check the security status of 8.8.8.8")
-        print("  - What can you tell me about example.com?")
-        print("  - Analyze the security posture of data-gadgets.com")
-        print("  - Where is 8.8.8.8 located?")
-        print("\nEnter your query (or 'quit' to exit):")
+        process_query(query)
 
 if __name__ == "__main__":
     main() 
