@@ -24,6 +24,8 @@ wheels/
 venv/
 ENV/
 env/
+agent2/
+test_agent/agent2/
 
 # IDE
 .idea/
