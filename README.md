@@ -38,6 +38,9 @@ pip install -r requirements.txt
 4. Create a `.env` file in the root directory and add your Anthropic API key:
 ```
 ANTHROPIC_API_KEY=your_api_key_here
+VT_API_KEY=your_api_key_here
+ABUSEIPDB_API_KEY=your_api_key_here
+SHODAN_API_KEY=your_api_key_here
 ```
 
 ## Project Structure
